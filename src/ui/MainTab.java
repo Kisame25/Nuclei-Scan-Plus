@@ -33,6 +33,7 @@ public class MainTab extends JTabbedPane {
     
     private HttpRequestEditor requestViewer;
     private HttpResponseEditor responseViewer;
+    private JEditorPane advisoryViewer;
     
     private JTextArea logArea;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
@@ -189,6 +190,11 @@ public class MainTab extends JTabbedPane {
         requestViewer = api.userInterface().createHttpRequestEditor();
         responseViewer = api.userInterface().createHttpResponseEditor();
         
+        advisoryViewer = new JEditorPane();
+        advisoryViewer.setEditable(false);
+        advisoryViewer.setContentType("text/html");
+        
+        messageTabs.addTab("Description", new JScrollPane(advisoryViewer));
         messageTabs.addTab("Request", requestViewer.uiComponent());
         messageTabs.addTab("Response", responseViewer.uiComponent());
         
@@ -210,10 +216,18 @@ public class MainTab extends JTabbedPane {
     }
 
     private void updateRequestResponseView(AuditIssue issue) {
-        if (issue != null && !issue.requestResponses().isEmpty()) {
-            requestViewer.setRequest(issue.requestResponses().get(0).request());
-            if (issue.requestResponses().get(0).response() != null) {
-                responseViewer.setResponse(issue.requestResponses().get(0).response());
+        if (issue != null) {
+            advisoryViewer.setText(issue.detail());
+            advisoryViewer.setCaretPosition(0);
+
+            if (!issue.requestResponses().isEmpty()) {
+                requestViewer.setRequest(issue.requestResponses().get(0).request());
+                if (issue.requestResponses().get(0).response() != null) {
+                    responseViewer.setResponse(issue.requestResponses().get(0).response());
+                }
+            } else {
+                requestViewer.setRequest(null);
+                responseViewer.setResponse(null);
             }
         }
     }

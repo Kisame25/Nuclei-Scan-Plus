@@ -43,8 +43,7 @@ public class NucleiScanner implements IScanModule {
     private final Config config;
     private final MainTab mainTab;
     private final Gson gson;
-    private final Set<String> scannedUrls = ConcurrentHashMap.newKeySet();
-    private final Semaphore scanSemaphore = new Semaphore(10); // Increased to 10 concurrent scans
+    private final Semaphore scanSemaphore = new Semaphore(10);
 
     public NucleiScanner(MontoyaApi api, Config config, MainTab mainTab) {
         this.api = api;
@@ -65,11 +64,6 @@ public class NucleiScanner implements IScanModule {
 
     @Override
     public List<AuditIssue> doPassiveScan(HttpRequestResponse baseRequestResponse, ScanOptions options) {
-        String url = baseRequestResponse.request().url();
-        if (scannedUrls.contains(url)) {
-            return null;
-        }
-        scannedUrls.add(url);
         return runNuclei(baseRequestResponse, options);
     }
 
@@ -95,7 +89,6 @@ public class NucleiScanner implements IScanModule {
         try {
             List<String> command = buildCommand(options);
             
-            // Handle Burp XML export if needed
             if (options != null && options.keepOriginalReq()) {
                 tempBurpXml = File.createTempFile("nuclei_req_", ".xml");
                 String xmlContent = generateBurpXml(baseRequestResponse);
@@ -169,7 +162,12 @@ public class NucleiScanner implements IScanModule {
         if (options != null) {
             if (options.getSelectedNucleiTemplates() != null) {
                 for (String tplDir : options.getSelectedNucleiTemplates()) {
-                    command.add("-" + tplDir);
+                    if(tplDir.equals("dast")){ 
+                        command.add("-" + tplDir);
+                    }else{
+                        command.add("-t");
+                        command.add(tplDir);
+                    }  
                 }
             }
             if (options.getSingleTemplatePath() != null && !options.getSingleTemplatePath().isEmpty()) {
@@ -196,10 +194,10 @@ public class NucleiScanner implements IScanModule {
                     return;
                 }
             } catch (Exception e) {
-                // Not JSON or parse error
+                mainTab.log("JSON Parse Error: " + e.getMessage());
             }
         }
-        parseNucleiTextFinding(strippedLine, issues);
+        parseNucleiTextFinding(strippedLine, issues, baseRequestResponse);
     }
 
     private String generateBurpXml(HttpRequestResponse baseRequestResponse) {
@@ -275,7 +273,7 @@ public class NucleiScanner implements IScanModule {
         return xml.toString();
     }
 
-    private void parseNucleiTextFinding(String line, List<AuditIssue> issues) {
+    private void parseNucleiTextFinding(String line, List<AuditIssue> issues, HttpRequestResponse baseRequestResponse) {
         Pattern pattern = Pattern.compile("^\\[([^\\]]+)\\] \\[([^\\]]+)\\] \\[([^\\]]+)\\] (\\S+)");
         Matcher matcher = pattern.matcher(line);
         
@@ -285,6 +283,19 @@ public class NucleiScanner implements IScanModule {
             String severityStr = matcher.group(3);
             String url = matcher.group(4);
             
+            HttpService service = baseRequestResponse.request().httpService();
+            String path = getPathFromUrl(url);
+            HttpRequest request = HttpRequest.httpRequest(service, "GET " + path + " HTTP/1.1\r\nHost: " + service.host() + "\r\n\r\n");
+            
+            HttpResponse response;
+            if (url.equals(baseRequestResponse.request().url()) && baseRequestResponse.response() != null) {
+                response = baseRequestResponse.response();
+            } else {
+                response = HttpResponse.httpResponse("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            }
+
+            HttpRequestResponse reqRes = HttpRequestResponse.httpRequestResponse(request, response);
+
             String detail = String.format("<html><body><b>Nuclei Template:</b> %s<br><b>Protocol:</b> %s<br><b>Matched at:</b> %s<br><br><font color='red'><i>Warning: Full request/response only available in JSON mode. Ensure Nuclei outputs JSON findings.</i></font></body></html>",
                     templateId, proto, url);
 
@@ -295,34 +306,96 @@ public class NucleiScanner implements IScanModule {
                     url,
                     mapSeverity(severityStr),
                     AuditIssueConfidence.FIRM,
-                    new HttpRequestResponse[]{}
+                    new HttpRequestResponse[]{reqRes}
             ));
         }
     }
 
     private AuditIssue parseNucleiJsonFinding(JsonObject json, HttpRequestResponse baseRequestResponse) {
-        String name = json.has("template-id") ? json.get("template-id").getAsString() : "Nuclei Finding";
+        String templateId = json.has("template-id") ? json.get("template-id").getAsString() : "Nuclei Finding";
+        String matcherName = json.has("matcher-name") ? json.get("matcher-name").getAsString() : "";
+        String extractorName = json.has("extractor-name") ? json.get("extractor-name").getAsString() : "";
         
+        if (matcherName.isEmpty() && templateId.contains(":")) {
+            int colonIndex = templateId.indexOf(':');
+            matcherName = templateId.substring(colonIndex + 1);
+            templateId = templateId.substring(0, colonIndex);
+        }
+
+        String name = templateId;
+        if (!matcherName.isEmpty()) name += " (" + matcherName + ")";
+        else if (!extractorName.isEmpty()) name += " (" + extractorName + ")";
+
         JsonObject info = json.getAsJsonObject("info");
-        String severityStr = info != null && info.has("severity") ? info.get("severity").getAsString() : "info";
-        String description = info != null && info.has("name") ? info.get("name").getAsString() : "";
+        String severityStr = info != null && info.has("severity") && !info.get("severity").isJsonNull() ? info.get("severity").getAsString() : "info";
+        String description = info != null && info.has("description") && !info.get("description").isJsonNull() ? info.get("description").getAsString() : "";
+        String remediation = info != null && info.has("remediation") && !info.get("remediation").isJsonNull() ? info.get("remediation").getAsString() : "";
+        String templateName = info != null && info.has("name") && !info.get("name").isJsonNull() ? info.get("name").getAsString() : "";
         
         AuditIssueSeverity severity = mapSeverity(severityStr);
         
-        String rawRequest = json.has("request") ? json.get("request").getAsString() : "";
-        String rawResponse = json.has("response") ? json.get("response").getAsString() : "";
+        String rawRequest = json.has("request") && !json.get("request").isJsonNull() ? json.get("request").getAsString() : "";
+        String rawResponse = json.has("response") && !json.get("response").isJsonNull() ? json.get("response").getAsString() : "";
         
-        // Extract metadata
+        String matchedAt = "";
+        if (json.has("matched-at") && !json.get("matched-at").isJsonNull()) matchedAt = json.get("matched-at").getAsString();
+        else if (json.has("url") && !json.get("url").isJsonNull()) matchedAt = json.get("url").getAsString();
+        
+        if (matchedAt.isEmpty()) {
+            matchedAt = baseRequestResponse.request().url();
+        }
+
         StringBuilder metadata = new StringBuilder();
-        if (info != null && info.has("classification")) {
+        metadata.append("<html><body>");
+        metadata.append("<h3>Detail Vuln</h3>");
+        if (!description.isEmpty()) {
+            metadata.append("<p>").append(description.replace("\n", "<br>")).append("</p>");
+        } else {
+            metadata.append("<p><i>No description provided by template.</i></p>");
+        }
+
+        metadata.append("<h3>Remediation</h3>");
+        if (!remediation.isEmpty()) {
+            metadata.append("<p>").append(remediation.replace("\n", "<br>")).append("</p>");
+        } else {
+            metadata.append("<p><i>Refer to Nuclei template for remediation.</i></p>");
+        }
+
+        metadata.append("<hr>");
+        metadata.append("<b>Nuclei Template:</b> ").append(templateId).append("<br>");
+        metadata.append("<b>Template Name:</b> ").append(templateName).append("<br>");
+        metadata.append("<b>Matched at:</b> ").append(matchedAt).append("<br><br>");
+        
+        if (json.has("extracted-results") && !json.get("extracted-results").isJsonNull()) {
+            metadata.append("<b>Extracted Results:</b><br>");
+            JsonElement extracted = json.get("extracted-results");
+            if (extracted.isJsonArray()) {
+                for (JsonElement e : extracted.getAsJsonArray()) {
+                    if (!e.isJsonNull()) {
+                        metadata.append("- ").append(e.getAsString().replace("<", "&lt;").replace(">", "&gt;")).append("<br>");
+                    }
+                }
+            } else {
+                metadata.append("- ").append(extracted.getAsString().replace("<", "&lt;").replace(">", "&gt;")).append("<br>");
+            }
+            metadata.append("<br>");
+        }
+
+        if (json.has("curl-command") && !json.get("curl-command").isJsonNull()) {
+            metadata.append("<b>Curl Command:</b><br><code>")
+                    .append(json.get("curl-command").getAsString().replace("<", "&lt;").replace(">", "&gt;"))
+                    .append("</code><br><br>");
+        }
+
+        if (info != null && info.has("classification") && !info.get("classification").isJsonNull()) {
             JsonObject classif = info.getAsJsonObject("classification");
-            if (classif.has("cve-id")) {
+            if (classif.has("cve-id") && !classif.get("cve-id").isJsonNull()) {
                 metadata.append("<b>CVE:</b> ");
                 JsonElement cve = classif.get("cve-id");
                 metadata.append(cve.isJsonArray() ? cve.getAsJsonArray().toString() : cve.getAsString());
                 metadata.append("<br>");
             }
-            if (classif.has("cwe-id")) {
+            if (classif.has("cwe-id") && !classif.get("cwe-id").isJsonNull()) {
                 metadata.append("<b>CWE:</b> ");
                 JsonElement cwe = classif.get("cwe-id");
                 metadata.append(cwe.isJsonArray() ? cwe.getAsJsonArray().toString() : cwe.getAsString());
@@ -330,32 +403,57 @@ public class NucleiScanner implements IScanModule {
             }
         }
         
-        if (info != null && info.has("reference")) {
+        if (info != null && info.has("reference") && !info.get("reference").isJsonNull()) {
             metadata.append("<b>References:</b><br>");
             JsonElement refs = info.get("reference");
             if (refs.isJsonArray()) {
                 for (JsonElement ref : refs.getAsJsonArray()) {
-                    metadata.append("- ").append(ref.getAsString()).append("<br>");
+                    if (!ref.isJsonNull()) {
+                        metadata.append("- <a href='").append(ref.getAsString()).append("'>")
+                                .append(ref.getAsString()).append("</a><br>");
+                    }
                 }
             } else {
-                metadata.append("- ").append(refs.getAsString()).append("<br>");
+                metadata.append("- <a href='").append(refs.getAsString()).append("'>")
+                        .append(refs.getAsString()).append("</a><br>");
             }
         }
 
+        if (json.has("ip") && !json.get("ip").isJsonNull()) {
+            metadata.append("<br><b>IP:</b> ").append(json.get("ip").getAsString());
+        }
+        if (json.has("timestamp") && !json.get("timestamp").isJsonNull()) {
+            metadata.append("<br><b>Timestamp:</b> ").append(json.get("timestamp").getAsString());
+        }
+        metadata.append("</body></html>");
+
         HttpService service = baseRequestResponse.request().httpService();
-        HttpRequest request = rawRequest.isEmpty() ? baseRequestResponse.request() : HttpRequest.httpRequest(service, rawRequest);
-        HttpResponse response = rawResponse.isEmpty() ? baseRequestResponse.response() : HttpResponse.httpResponse(rawResponse);
+        
+        HttpRequest request;
+        if (rawRequest.isEmpty() || rawRequest.equals("Raw request")) {
+            String path = getPathFromUrl(matchedAt);
+            request = HttpRequest.httpRequest(service, "GET " + path + " HTTP/1.1\r\nHost: " + service.host() + "\r\n\r\n");
+        } else {
+            request = HttpRequest.httpRequest(service, rawRequest);
+        }
+        
+        HttpResponse response;
+        if (rawResponse.isEmpty() || rawResponse.equals("Raw response")) {
+            if (matchedAt.equals(baseRequestResponse.request().url()) && baseRequestResponse.response() != null) {
+                response = baseRequestResponse.response();
+            } else {
+                response = HttpResponse.httpResponse("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+            }
+        } else {
+            response = HttpResponse.httpResponse(rawResponse);
+        }
 
         HttpRequestResponse reqRes = HttpRequestResponse.httpRequestResponse(request, response);
 
-        String matchedAt = json.has("matched-at") ? json.get("matched-at").getAsString() : baseRequestResponse.request().url();
-        String formattedDetail = String.format("<html><body><b>Nuclei Template:</b> %s<br><b>Name:</b> %s<br><b>Matched at:</b> %s<br><br>%s</body></html>",
-                name, description, matchedAt, metadata.toString());
-
         return new CustomScanIssue(
                 name,
-                formattedDetail,
-                "Refer to Nuclei template for remediation.",
+                metadata.toString(),
+                remediation.isEmpty() ? "Refer to Nuclei template for remediation." : remediation,
                 matchedAt,
                 severity,
                 AuditIssueConfidence.FIRM,
@@ -363,10 +461,26 @@ public class NucleiScanner implements IScanModule {
         );
     }
 
+    private String getPathFromUrl(String urlStr) {
+        try {
+            if (urlStr.startsWith("http")) {
+                URL url = new URL(urlStr);
+                String path = url.getPath();
+                if (path == null || path.isEmpty()) path = "/";
+                if (url.getQuery() != null) path += "?" + url.getQuery();
+                return path;
+            }
+            return urlStr;
+        } catch (Exception e) {
+            return "/";
+        }
+    }
+
     private AuditIssueSeverity mapSeverity(String severity) {
         if (severity == null) return AuditIssueSeverity.INFORMATION;
-        switch (severity.toLowerCase()) {
+        switch (severity.toLowerCase().trim()) {
             case "critical":
+                return AuditIssueSeverity.HIGH;
             case "high":
                 return AuditIssueSeverity.HIGH;
             case "medium":

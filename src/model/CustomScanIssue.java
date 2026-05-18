@@ -4,7 +4,6 @@ import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 import burp.api.montoya.scanner.audit.issues.AuditIssueDefinition;
-import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint;
 import burp.api.montoya.collaborator.Interaction;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.HttpService;
@@ -20,6 +19,7 @@ public class CustomScanIssue implements AuditIssue {
     private final AuditIssueSeverity severity;
     private final AuditIssueConfidence confidence;
     private final List<HttpRequestResponse> httpMessages;
+    private final AuditIssueDefinition definition;
 
     public CustomScanIssue(
             String name,
@@ -36,6 +36,9 @@ public class CustomScanIssue implements AuditIssue {
         this.severity = severity;
         this.confidence = confidence;
         this.httpMessages = Arrays.asList(httpMessages);
+        
+        // Create a definition for better Burp integration
+        this.definition = AuditIssueDefinition.auditIssueDefinition(name, detail, remediation, severity);
     }
 
     @Override
@@ -71,6 +74,6 @@ public class CustomScanIssue implements AuditIssue {
 
     @Override
     public AuditIssueDefinition definition() {
-        return null;
+        return definition;
     }
 }
