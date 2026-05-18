@@ -61,7 +61,7 @@ public class ContextMenuFactory implements ContextMenuItemsProvider {
                 ScanOptions options = new ScanOptions(
                         dialog.getSingleTemplatePath(),
                         dialog.getCustomNucleiArgs(),
-                        dialog.keepOriginalReq()
+                        dialog.scanPostReq()
                 );
                 
                 for (String tpl : dialog.getSelectedNucleiTemplates()) {

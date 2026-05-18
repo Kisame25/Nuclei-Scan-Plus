@@ -89,7 +89,7 @@ public class NucleiScanner implements IScanModule {
         try {
             List<String> command = buildCommand(options);
             
-            if (options != null && options.keepOriginalReq()) {
+            if (options != null && options.scanPostReq()) {
                 tempBurpXml = File.createTempFile("nuclei_req_", ".xml");
                 String xmlContent = generateBurpXml(baseRequestResponse);
                 java.nio.file.Files.write(tempBurpXml.toPath(), xmlContent.getBytes(StandardCharsets.UTF_8));
@@ -124,13 +124,7 @@ public class NucleiScanner implements IScanModule {
                     line = line.trim();
                     if (line.isEmpty()) continue;
                     
-                    if (task != null) {
-                        task.setLatestLog(line);
-                        mainTab.updateTasks();
-                    }
-                    
-                    mainTab.log("NUCLEI: " + line);
-                    processOutputLine(line, issues, baseRequestResponse);
+                    processOutputLine(line, issues, baseRequestResponse, task);
                 }
             }
             
@@ -192,20 +186,75 @@ public class NucleiScanner implements IScanModule {
         return command;
     }
 
-    private void processOutputLine(String line, List<AuditIssue> issues, HttpRequestResponse baseRequestResponse) {
+    private void processOutputLine(String line, List<AuditIssue> issues, HttpRequestResponse baseRequestResponse, ScanTask task) {
         String strippedLine = stripAnsi(line);
+        String logLine = strippedLine;
+
         if (strippedLine.startsWith("{") && strippedLine.endsWith("}")) {
             try {
                 JsonElement element = JsonParser.parseString(strippedLine);
                 if (element.isJsonObject()) {
-                    issues.add(parseNucleiJsonFinding(element.getAsJsonObject(), baseRequestResponse));
+                    JsonObject jsonObj = element.getAsJsonObject();
+                    logLine = formatCondensedLog(jsonObj);
+                    
+                    if (task != null) {
+                        task.setLatestLog(logLine);
+                        mainTab.updateTasks();
+                    }
+                    mainTab.log("NUCLEI: " + logLine);
+
+                    issues.add(parseNucleiJsonFinding(jsonObj, baseRequestResponse));
                     return;
                 }
             } catch (Exception e) {
-                mainTab.log("JSON Parse Error: " + e.getMessage());
+                // Ignore and fall back to text
             }
         }
+        
+        if (task != null) {
+            task.setLatestLog(logLine);
+            mainTab.updateTasks();
+        }
+        mainTab.log("NUCLEI: " + logLine);
         parseNucleiTextFinding(strippedLine, issues, baseRequestResponse);
+    }
+
+    private String formatCondensedLog(JsonObject json) {
+        String templateId = json.has("template-id") ? json.get("template-id").getAsString() : "unknown";
+        String type = json.has("type") ? json.get("type").getAsString() : "unknown";
+        
+        JsonObject info = json.getAsJsonObject("info");
+        String severity = info != null && info.has("severity") && !info.get("severity").isJsonNull() ? info.get("severity").getAsString() : "info";
+        
+        String matchedAt = "";
+        if (json.has("matched-at") && !json.get("matched-at").isJsonNull()) matchedAt = json.get("matched-at").getAsString();
+        else if (json.has("url") && !json.get("url").isJsonNull()) matchedAt = json.get("url").getAsString();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("[").append(templateId).append("] ");
+        sb.append("[").append(type).append("] ");
+        sb.append("[").append(severity).append("] ");
+        sb.append(matchedAt);
+
+        if (json.has("fuzzing_parameter") && !json.get("fuzzing_parameter").isJsonNull()) {
+            String pos = json.has("fuzzing_position") && !json.get("fuzzing_position").isJsonNull() ? json.get("fuzzing_position").getAsString() : "";
+            String param = json.get("fuzzing_parameter").getAsString();
+            if (!pos.isEmpty()) {
+                sb.append(" [").append(pos).append(":").append(param).append("]");
+            } else {
+                sb.append(" [").append(param).append("]");
+            }
+        }
+
+        String method = "";
+        if (json.has("fuzzing_method") && !json.get("fuzzing_method").isJsonNull()) method = json.get("fuzzing_method").getAsString();
+        else if (json.has("method") && !json.get("method").isJsonNull()) method = json.get("method").getAsString();
+        
+        if (!method.isEmpty()) {
+            sb.append(" [").append(method).append("]");
+        }
+
+        return sb.toString();
     }
 
     private String generateBurpXml(HttpRequestResponse baseRequestResponse) {

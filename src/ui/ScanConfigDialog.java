@@ -28,7 +28,7 @@ public class ScanConfigDialog extends JDialog {
     // 3. Custom Args (Bottom)
     private final JCheckBox customArgsCheckbox;
     private final JTextField customArgsField;
-    private final JCheckBox keepOriginalReq;
+    private final JCheckBox scanPostReq;
 
     private final CardLayout cardLayout = new CardLayout();
     private final JPanel contentPanel = new JPanel(cardLayout);
@@ -43,7 +43,7 @@ public class ScanConfigDialog extends JDialog {
         setPreferredSize(new Dimension(960, 720));
 
         // Sidebar Navigation
-        String[] navItems = {"Request", "Nuclei Configuration"};
+        String[] navItems = {"Request", "Scan Options"};
         sidebarList = new JList<>(navItems);
         sidebarList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         sidebarList.setSelectedIndex(1); // Default to config
@@ -140,15 +140,15 @@ public class ScanConfigDialog extends JDialog {
         // This option allow user to controll the req want to scan with option keep original request when user click on check
         // And normal request scan
         gbc.gridy = row++; gbc.gridheight = 1; gbc.insets = new Insets(5, 8, 5, 8);
-        keepOriginalReq = new JCheckBox("Scan Post method");
-        configCard.add(keepOriginalReq, gbc);
+        scanPostReq = new JCheckBox("Scan Post Method");
+        configCard.add(scanPostReq, gbc);
 
 
         // Spacer
         gbc.gridy = row++; gbc.weighty = 1.0;
         configCard.add(new JPanel(), gbc);
 
-        contentPanel.add(new JScrollPane(configCard), "Nuclei Configuration");
+        contentPanel.add(new JScrollPane(configCard), "Scan Options");
         layoutCard();
 
         // Bottom Buttons
@@ -165,7 +165,7 @@ public class ScanConfigDialog extends JDialog {
     }
 
     private void layoutCard() {
-        cardLayout.show(contentPanel, "Nuclei Configuration");
+        cardLayout.show(contentPanel, "Scan Options");
     }
 
     private void populateNucleiTemplates(String rootPath, JPanel panel) {
@@ -218,8 +218,8 @@ public class ScanConfigDialog extends JDialog {
         return customArgsCheckbox.isSelected() ? customArgsField.getText().trim() : "";
     }
 
-    public boolean keepOriginalReq() {
-        return keepOriginalReq.isSelected();
+    public boolean scanPostReq() {
+        return scanPostReq.isSelected();
     }
 
     public burp.api.montoya.http.message.requests.HttpRequest getEditedRequest() {

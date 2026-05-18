@@ -9,13 +9,13 @@ public class ScanOptions {
     private final List<String> selectedNucleiTemplates;
     private final String singleTemplatePath;
     private final String customNucleiArgs;
-    private final boolean keepOriginalReq;
+    private final boolean scanPostReq;
     private ScanTask task;
 
-    public ScanOptions(String singleTemplatePath, String customNucleiArgs, boolean keepOriginalReq) {
+    public ScanOptions(String singleTemplatePath, String customNucleiArgs, boolean scanPostReq) {
         this.singleTemplatePath = singleTemplatePath;
         this.customNucleiArgs = customNucleiArgs;
-        this.keepOriginalReq = keepOriginalReq;
+        this.scanPostReq = scanPostReq;
         this.selectedNucleiTemplates = new ArrayList<>();
     }
 
@@ -43,8 +43,8 @@ public class ScanOptions {
         return customNucleiArgs;
     }
 
-    public boolean keepOriginalReq() {
-        return keepOriginalReq;
+    public boolean scanPostReq() {
+        return scanPostReq;
     }
 
     public static ScanOptions defaultOptions() {
