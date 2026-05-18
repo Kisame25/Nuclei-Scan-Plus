@@ -162,8 +162,15 @@ public class NucleiScanner implements IScanModule {
         if (options != null) {
             if (options.getSelectedNucleiTemplates() != null) {
                 for (String tplDir : options.getSelectedNucleiTemplates()) {
-                    if(tplDir.equals("dast")){ 
+                    if(tplDir.equals("dast") || tplDir.equals("file") || tplDir.equals("code") || tplDir.equals("headless")){ 
                         command.add("-" + tplDir);
+                    }else if(tplDir.equals("workflows")){
+                        command.add("-w");
+                        command.add(tplDir);
+                    }else if(tplDir.equals("cloud")){
+                        command.add("-t");
+                        command.add(tplDir);
+                        command.add("-esc");
                     }else{
                         command.add("-t");
                         command.add(tplDir);
@@ -173,6 +180,7 @@ public class NucleiScanner implements IScanModule {
             if (options.getSingleTemplatePath() != null && !options.getSingleTemplatePath().isEmpty()) {
                 command.add("-t");
                 command.add(options.getSingleTemplatePath());
+                command.add("-esc");
             }
             if (options.getCustomNucleiArgs() != null && !options.getCustomNucleiArgs().isEmpty()) {
                 String[] args = options.getCustomNucleiArgs().split("\\s+");
@@ -438,15 +446,7 @@ public class NucleiScanner implements IScanModule {
         }
         
         HttpResponse response;
-        if (rawResponse.isEmpty() || rawResponse.equals("Raw response")) {
-            if (matchedAt.equals(baseRequestResponse.request().url()) && baseRequestResponse.response() != null) {
-                response = baseRequestResponse.response();
-            } else {
-                response = HttpResponse.httpResponse("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
-            }
-        } else {
-            response = HttpResponse.httpResponse(rawResponse);
-        }
+        response = HttpResponse.httpResponse(rawResponse);
 
         HttpRequestResponse reqRes = HttpRequestResponse.httpRequestResponse(request, response);
 

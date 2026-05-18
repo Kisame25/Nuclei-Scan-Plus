@@ -140,7 +140,7 @@ public class ScanConfigDialog extends JDialog {
         // This option allow user to controll the req want to scan with option keep original request when user click on check
         // And normal request scan
         gbc.gridy = row++; gbc.gridheight = 1; gbc.insets = new Insets(5, 8, 5, 8);
-        keepOriginalReq = new JCheckBox("Keep Original Request when scan");
+        keepOriginalReq = new JCheckBox("Scan Post method");
         configCard.add(keepOriginalReq, gbc);
 
 
@@ -185,9 +185,11 @@ public class ScanConfigDialog extends JDialog {
 
         for (File f : files) {
             if (f.isDirectory() && !f.getName().startsWith(".")) {
-                JCheckBox cb = new JCheckBox(f.getName(), false);
-                nucleiDirCheckboxes.put(f.getName(), cb);
-                panel.add(cb);
+                if(!f.getName().equals("helpers") && !f.getName().equals("profiles")){
+                    JCheckBox cb = new JCheckBox(f.getName(), false);
+                    nucleiDirCheckboxes.put(f.getName(), cb);
+                    panel.add(cb);
+                }
             }
         }
         
