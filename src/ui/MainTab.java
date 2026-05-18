@@ -375,8 +375,8 @@ public class MainTab extends JTabbedPane {
         logArea = new JTextArea();
         logArea.setEditable(false);
         logArea.setFont(FontUtils.getCodeFont());
-        logArea.setBackground(new Color(30, 30, 30));
-        logArea.setForeground(new Color(200, 200, 200));
+        logArea.setBackground(UIManager.getColor("TextArea.background"));
+        logArea.setForeground(UIManager.getColor("TextArea.foreground"));
         
         JScrollPane scrollPane = new JScrollPane(logArea);
         logPanel.add(scrollPane, BorderLayout.CENTER);
@@ -395,11 +395,35 @@ public class MainTab extends JTabbedPane {
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
             ScanTask task = (ScanTask) value;
             
+            Color tableBg = UIManager.getColor("Table.background");
+            boolean isDark = (tableBg.getRed() + tableBg.getGreen() + tableBg.getBlue()) / 3 < 128;
+
+            Color cardBg;
+            Color titleFg;
+            Color subFg;
+            Color progressBg;
+
+            if (isSelected) {
+                cardBg = UIManager.getColor("Table.selectionBackground");
+                titleFg = UIManager.getColor("Table.selectionForeground");
+                subFg = UIManager.getColor("Table.selectionForeground");
+                progressBg = isDark ? cardBg.darker() : cardBg.brighter();
+            } else {
+                if (isDark) {
+                    cardBg = new Color(tableBg.getRed() + 15, tableBg.getGreen() + 15, tableBg.getBlue() + 15);
+                } else {
+                    cardBg = new Color(Math.max(0, tableBg.getRed() - 15), Math.max(0, tableBg.getGreen() - 15), Math.max(0, tableBg.getBlue() - 15));
+                }
+                titleFg = UIManager.getColor("Label.foreground");
+                subFg = UIManager.getColor("Label.disabledForeground");
+                progressBg = isDark ? new Color(50, 50, 50) : new Color(220, 220, 220);
+            }
+
             // Outer wrapper for margin - Bottom only
             JPanel wrapper = new JPanel(new BorderLayout());
             wrapper.setBorder(BorderFactory.createEmptyBorder(4, 4, 8, 4));
             wrapper.setOpaque(true);
-            wrapper.setBackground(UIManager.getColor("Table.background"));
+            wrapper.setBackground(tableBg);
 
             // The actual card
             JPanel card = new JPanel(new GridBagLayout()) {
@@ -419,7 +443,7 @@ public class MainTab extends JTabbedPane {
                 }
             };
             card.setOpaque(false);
-            card.setBackground(isSelected ? new Color(42, 54, 70) : new Color(54, 54, 54));
+            card.setBackground(cardBg);
             card.setBorder(BorderFactory.createEmptyBorder(12, 15, 12, 15));
 
             GridBagConstraints gbc = new GridBagConstraints();
@@ -428,7 +452,7 @@ public class MainTab extends JTabbedPane {
             // 1. Title
             JLabel nameLabel = new JLabel(task.getId() + ". " + task.getName());
             nameLabel.setFont(FontUtils.getTitleFont());
-            nameLabel.setForeground(Color.WHITE);
+            nameLabel.setForeground(titleFg);
             gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2; gbc.weightx = 1.0;
             card.add(nameLabel, gbc);
 
@@ -440,7 +464,7 @@ public class MainTab extends JTabbedPane {
 
             JLabel subLabel = new JLabel(subText);
             subLabel.setFont(FontUtils.getSubTitleFont());
-            subLabel.setForeground(new Color(160, 160, 160));
+            subLabel.setForeground(subFg);
             gbc.gridy = 1; gbc.insets = new Insets(2, 0, 12, 0); // More room below subtitle
             card.add(subLabel, gbc);
 
@@ -449,7 +473,7 @@ public class MainTab extends JTabbedPane {
             progressBar.setValue(task.getProgress());
             progressBar.setPreferredSize(new Dimension(100, 4));
             progressBar.setForeground(new Color(0, 120, 215));
-            progressBar.setBackground(new Color(50, 50, 50));
+            progressBar.setBackground(progressBg);
             progressBar.setBorderPainted(false);
             gbc.gridy = 2; gbc.insets = new Insets(0, 0, 12, 0); // More room below progress bar
             card.add(progressBar, gbc);
@@ -463,9 +487,13 @@ public class MainTab extends JTabbedPane {
             String statusIcon = task.getStatus().equalsIgnoreCase("Finished") ? "✓ " : "⚡ ";
             JLabel statusLabel = new JLabel(statusIcon + task.getStatus());
             statusLabel.setFont(FontUtils.getSubTitleFont());
-            if (task.getStatus().equalsIgnoreCase("Finished")) statusLabel.setForeground(new Color(0, 180, 0));
-            else if (task.getStatus().equalsIgnoreCase("Stopped")) statusLabel.setForeground(Color.RED);
-            else statusLabel.setForeground(new Color(180, 180, 180));
+            if (task.getStatus().equalsIgnoreCase("Finished")) {
+                statusLabel.setForeground(isDark ? new Color(0, 180, 0) : new Color(0, 120, 0));
+            } else if (task.getStatus().equalsIgnoreCase("Stopped")) {
+                statusLabel.setForeground(Color.RED);
+            } else {
+                statusLabel.setForeground(subFg);
+            }
             
             bottomGbc.gridx = 0; bottomGbc.gridy = 0; bottomGbc.weightx = 1.0;
             bottomGbc.anchor = GridBagConstraints.WEST;
@@ -476,7 +504,7 @@ public class MainTab extends JTabbedPane {
             issuePanel.setOpaque(false);
             JLabel issuesText = new JLabel("Issues: ");
             issuesText.setFont(FontUtils.getSubTitleFont());
-            issuesText.setForeground(new Color(160, 160, 160));
+            issuesText.setForeground(subFg);
             issuePanel.add(issuesText);
             
             // Fixed order: High, Medium, Low, Info

@@ -132,7 +132,7 @@ public class ScanConfigDialog extends JDialog {
 
         gbc.gridx = 0; gbc.gridy = row++; gbc.gridwidth = 3;
         JLabel helpLabel = new JLabel("e.g., -rl 10 -v -debug. These will be appended to the command.");
-        helpLabel.setForeground(new Color(102, 102, 102));
+        helpLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         configCard.add(helpLabel, gbc);
 
         // In nuclei when scan it not use the original request from burp suite 
