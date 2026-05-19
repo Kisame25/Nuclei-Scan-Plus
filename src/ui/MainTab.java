@@ -139,6 +139,7 @@ public class MainTab extends JTabbedPane {
                     SwingUtilities.invokeLater(() -> {
                         selectedTaskLabel.setText("Select a task to view details");
                         resultsTableModel.setIssues(new ArrayList<>());
+                        advisoryViewer.setText("");
                         requestViewer.setRequest(null);
                         responseViewer.setResponse(null);
                     });
@@ -213,6 +214,11 @@ public class MainTab extends JTabbedPane {
         this.currentSelectedTask = task;
         selectedTaskLabel.setText("  " + task.getId() + ". " + task.getName());
         resultsTableModel.setIssues(task.getIssues());
+        
+        // Clear viewers when switching tasks
+        advisoryViewer.setText("");
+        requestViewer.setRequest(null);
+        responseViewer.setResponse(null);
     }
 
     private void updateRequestResponseView(AuditIssue issue) {
