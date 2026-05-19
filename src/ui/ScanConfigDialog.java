@@ -44,10 +44,21 @@ public class ScanConfigDialog extends JDialog {
         setPreferredSize(new Dimension(960, 720));
 
         // Sidebar Navigation
-        String[] navItems = {"Request", "Scan Options"};
+        String[] navItems = {" 🎯 Targets", " ⚙️ Options"};
         sidebarList = new JList<>(navItems);
         sidebarList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        sidebarList.setSelectedIndex(1); // Default to config
+        sidebarList.setSelectedIndex(0); // Default to Targets
+        
+        // Custom renderer for larger font and padding
+        sidebarList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                label.setFont(FontUtils.getTitleFont());
+                label.setBorder(BorderFactory.createEmptyBorder(12, 10, 12, 10));
+                return label;
+            }
+        });
         
         sidebarList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
@@ -69,18 +80,25 @@ public class ScanConfigDialog extends JDialog {
             requestViewer.setRequest(selectedItems.get(0).request());
             requestCard.add(requestViewer.uiComponent(), BorderLayout.CENTER);
         } else {
-            JTextArea urlArea = new JTextArea();
-            urlArea.setEditable(false);
-            urlArea.setFont(FontUtils.getSubTitleFont());
-            StringBuilder sb = new StringBuilder();
-            sb.append("Scanning multiple items (").append(selectedItems.size()).append(" total):\n\n");
-            for (HttpRequestResponse item : selectedItems) {
-                sb.append("- ").append(item.request().url()).append("\n");
-            }
-            urlArea.setText(sb.toString());
-            requestCard.add(new JScrollPane(urlArea), BorderLayout.CENTER);
+            JPanel multiUrlPanel = new JPanel(new BorderLayout());
+            multiUrlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+            
+            JLabel titleLabel = new JLabel("Scanning multiple items (" + selectedItems.size() + " total):");
+            titleLabel.setFont(FontUtils.getSubTitleFont());
+            titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+            multiUrlPanel.add(titleLabel, BorderLayout.NORTH);
+
+            UrlsTableModel tableModel = new UrlsTableModel(selectedItems);
+            JTable urlTable = new JTable(tableModel);
+            
+            // Set column widths
+            urlTable.getColumnModel().getColumn(0).setPreferredWidth(50);
+            urlTable.getColumnModel().getColumn(0).setMaxWidth(100);
+            
+            multiUrlPanel.add(new JScrollPane(urlTable), BorderLayout.CENTER);
+            requestCard.add(multiUrlPanel, BorderLayout.CENTER);
         }
-        contentPanel.add(requestCard, "Request");
+        contentPanel.add(requestCard, " 🎯 Targets");
 
         // 2. Nuclei Configuration Card (Reordered)
         JPanel configCard = new JPanel(new GridBagLayout());
@@ -166,8 +184,9 @@ public class ScanConfigDialog extends JDialog {
         gbc.gridy = row++; gbc.weighty = 1.0;
         configCard.add(new JPanel(), gbc);
 
-        contentPanel.add(new JScrollPane(configCard), "Scan Options");
-        layoutCard();
+        contentPanel.add(new JScrollPane(configCard), " ⚙️ Options");
+  
+        cardLayout.show(contentPanel, sidebarList.getSelectedValue());
 
         // Bottom Buttons
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -180,10 +199,6 @@ public class ScanConfigDialog extends JDialog {
 
         pack();
         setLocationRelativeTo(owner);
-    }
-
-    private void layoutCard() {
-        cardLayout.show(contentPanel, "Scan Options");
     }
 
     private void populateNucleiTemplates(String rootPath, JPanel panel) {
