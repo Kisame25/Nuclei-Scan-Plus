@@ -67,7 +67,20 @@ public class NucleiScanner implements IScanModule {
         return runNuclei(baseRequestResponse, options);
     }
 
+    @Override
+    public List<AuditIssue> doActiveScanBatch(List<HttpRequestResponse> baseRequestResponses, AuditInsertionPoint insertionPoint, ScanOptions options) {
+        return runNucleiBatch(baseRequestResponses, options);
+    }
+
     private List<AuditIssue> runNuclei(HttpRequestResponse baseRequestResponse, ScanOptions options) {
+        List<HttpRequestResponse> list = new ArrayList<>();
+        list.add(baseRequestResponse);
+        return runNucleiBatch(list, options);
+    }
+
+    private List<AuditIssue> runNucleiBatch(List<HttpRequestResponse> baseRequestResponses, ScanOptions options) {
+        if (baseRequestResponses == null || baseRequestResponses.isEmpty()) return null;
+
         String nucleiPath = config.getNucleiPath();
         if (nucleiPath == null || nucleiPath.isEmpty()) {
             mainTab.log("Nuclei path not configured!");
@@ -84,26 +97,33 @@ public class NucleiScanner implements IScanModule {
         }
 
         List<AuditIssue> issues = new ArrayList<>();
-        File tempBurpXml = null;
+        File tempFile = null;
 
         try {
             List<String> command = buildCommand(options);
             
             if (options != null && options.scanPostReq()) {
-                tempBurpXml = File.createTempFile("nuclei_req_", ".xml");
-                String xmlContent = generateBurpXml(baseRequestResponse);
-                java.nio.file.Files.write(tempBurpXml.toPath(), xmlContent.getBytes(StandardCharsets.UTF_8));
+                tempFile = File.createTempFile("nuclei_req_", ".xml");
+                String xmlContent = generateBurpXml(baseRequestResponses);
+                java.nio.file.Files.write(tempFile.toPath(), xmlContent.getBytes(StandardCharsets.UTF_8));
                 
                 command.add("-l");
-                command.add(tempBurpXml.getAbsolutePath());
+                command.add(tempFile.getAbsolutePath());
                 command.add("-im");
                 command.add("burp");
             } else {
-                command.add("-u");
-                command.add(baseRequestResponse.request().url());
+                tempFile = File.createTempFile("nuclei_targets_", ".txt");
+                StringBuilder targets = new StringBuilder();
+                for (HttpRequestResponse item : baseRequestResponses) {
+                    targets.append(item.request().url()).append("\n");
+                }
+                java.nio.file.Files.write(tempFile.toPath(), targets.toString().getBytes(StandardCharsets.UTF_8));
+
+                command.add("-l");
+                command.add(tempFile.getAbsolutePath());
             }
 
-            mainTab.log("Executing: " + String.join(" ", command));
+            mainTab.log("Executing Batch Scan: " + String.join(" ", command));
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -112,6 +132,9 @@ public class NucleiScanner implements IScanModule {
             if (task != null) {
                 task.setCurrentProcess(process);
             }
+
+            // For batch scan, we use the first item as the default base for issues if no better match is found
+            HttpRequestResponse defaultBase = baseRequestResponses.get(0);
 
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
@@ -124,21 +147,21 @@ public class NucleiScanner implements IScanModule {
                     line = line.trim();
                     if (line.isEmpty()) continue;
                     
-                    processOutputLine(line, issues, baseRequestResponse, task);
+                    processOutputLine(line, issues, defaultBase, task);
                 }
             }
             
             boolean finished = process.waitFor(10, TimeUnit.MINUTES);
             if (!finished) {
-                mainTab.log("Nuclei process timed out for " + baseRequestResponse.request().url());
+                mainTab.log("Nuclei process timed out for batch scan");
                 process.destroyForcibly();
             }
         } catch (Exception e) {
-            mainTab.log("Error running Nuclei: " + e.getMessage());
+            mainTab.log("Error running Nuclei Batch: " + e.getMessage());
         } finally {
             scanSemaphore.release();
-            if (tempBurpXml != null && tempBurpXml.exists()) {
-                tempBurpXml.delete();
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
             }
         }
 
@@ -257,29 +280,7 @@ public class NucleiScanner implements IScanModule {
         return sb.toString();
     }
 
-    private String generateBurpXml(HttpRequestResponse baseRequestResponse) {
-        HttpRequest req = baseRequestResponse.request();
-        HttpResponse res = baseRequestResponse.response();
-        
-        String url = req.url();
-        String host = req.httpService().host();
-        int port = req.httpService().port();
-        String protocol = req.httpService().secure() ? "https" : "http";
-        String method = req.method();
-        String path = req.path();
-        
-        String requestBase64 = Base64.getEncoder().encodeToString(req.toByteArray().getBytes());
-        String responseBase64 = (res != null) ? Base64.getEncoder().encodeToString(res.toByteArray().getBytes()) : "";
-        
-        String extension = "";
-        int lastDot = path.lastIndexOf('.');
-        if (lastDot != -1 && lastDot > path.lastIndexOf('/')) {
-            extension = path.substring(lastDot + 1);
-            if (extension.contains("?")) {
-                extension = extension.substring(0, extension.indexOf('?'));
-            }
-        }
-
+    private String generateBurpXml(List<HttpRequestResponse> baseRequestResponses) {
         SimpleDateFormat sdf = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.US);
         String now = sdf.format(new Date());
         
@@ -309,22 +310,47 @@ public class NucleiScanner implements IScanModule {
         xml.append("<!ELEMENT comment (#PCDATA)>\n");
         xml.append("]>\n");
         xml.append("<items burpVersion=\"2026.4.3\" exportTime=\"" + now + "\">\n");
-        xml.append("  <item>\n");
-        xml.append("    <time>" + now + "</time>\n");
-        xml.append("    <url><![CDATA[" + url + "]]></url>\n");
-        xml.append("    <host ip=\"" + host + "\">" + host + "</host>\n");
-        xml.append("    <port>" + port + "</port>\n");
-        xml.append("    <protocol>" + protocol + "</protocol>\n");
-        xml.append("    <method><![CDATA[" + method + "]]></method>\n");
-        xml.append("    <path><![CDATA[" + path + "]]></path>\n");
-        xml.append("    <extension>" + extension + "</extension>\n");
-        xml.append("    <request base64=\"true\"><![CDATA[" + requestBase64 + "]]></request>\n");
-        xml.append("    <status>" + (res != null ? res.statusCode() : "") + "</status>\n");
-        xml.append("    <responselength>" + (res != null ? res.toByteArray().length() : 0) + "</responselength>\n");
-        xml.append("    <mimetype>" + (res != null && res.mimeType() != null ? res.mimeType().toString() : "") + "</mimetype>\n");
-        xml.append("    <response base64=\"true\"><![CDATA[" + responseBase64 + "]]></response>\n");
-        xml.append("    <comment></comment>\n");
-        xml.append("  </item>\n");
+
+        for (HttpRequestResponse baseRequestResponse : baseRequestResponses) {
+            HttpRequest req = baseRequestResponse.request();
+            HttpResponse res = baseRequestResponse.response();
+            
+            String url = req.url();
+            String host = req.httpService().host();
+            int port = req.httpService().port();
+            String protocol = req.httpService().secure() ? "https" : "http";
+            String method = req.method();
+            String path = req.path();
+            
+            String requestBase64 = Base64.getEncoder().encodeToString(req.toByteArray().getBytes());
+            String responseBase64 = (res != null) ? Base64.getEncoder().encodeToString(res.toByteArray().getBytes()) : "";
+            
+            String extension = "";
+            int lastDot = path.lastIndexOf('.');
+            if (lastDot != -1 && lastDot > path.lastIndexOf('/')) {
+                extension = path.substring(lastDot + 1);
+                if (extension.contains("?")) {
+                    extension = extension.substring(0, extension.indexOf('?'));
+                }
+            }
+
+            xml.append("  <item>\n");
+            xml.append("    <time>" + now + "</time>\n");
+            xml.append("    <url><![CDATA[" + url + "]]></url>\n");
+            xml.append("    <host ip=\"" + host + "\">" + host + "</host>\n");
+            xml.append("    <port>" + port + "</port>\n");
+            xml.append("    <protocol>" + protocol + "</protocol>\n");
+            xml.append("    <method><![CDATA[" + method + "]]></method>\n");
+            xml.append("    <path><![CDATA[" + path + "]]></path>\n");
+            xml.append("    <extension>" + extension + "</extension>\n");
+            xml.append("    <request base64=\"true\"><![CDATA[" + requestBase64 + "]]></request>\n");
+            xml.append("    <status>" + (res != null ? res.statusCode() : "") + "</status>\n");
+            xml.append("    <responselength>" + (res != null ? res.toByteArray().length() : 0) + "</responselength>\n");
+            xml.append("    <mimetype>" + (res != null && res.mimeType() != null ? res.mimeType().toString() : "") + "</mimetype>\n");
+            xml.append("    <response base64=\"true\"><![CDATA[" + responseBase64 + "]]></response>\n");
+            xml.append("    <comment></comment>\n");
+            xml.append("  </item>\n");
+        }
         xml.append("</items>\n");
         
         return xml.toString();
@@ -340,7 +366,9 @@ public class NucleiScanner implements IScanModule {
             String severityStr = matcher.group(3);
             String url = matcher.group(4);
             
-            HttpService service = baseRequestResponse.request().httpService();
+            HttpService service = getServiceFromUrl(url);
+            if (service == null) service = baseRequestResponse.request().httpService();
+
             String path = getPathFromUrl(url);
             HttpRequest request = HttpRequest.httpRequest(service, "GET " + path + " HTTP/1.1\r\nHost: " + service.host() + "\r\n\r\n");
             
@@ -484,7 +512,8 @@ public class NucleiScanner implements IScanModule {
         }
         metadata.append("</body></html>");
 
-        HttpService service = baseRequestResponse.request().httpService();
+        HttpService service = getServiceFromUrl(matchedAt);
+        if (service == null) service = baseRequestResponse.request().httpService();
         
         HttpRequest request;
         if (rawRequest.isEmpty() || rawRequest.equals("Raw request")) {
@@ -508,6 +537,21 @@ public class NucleiScanner implements IScanModule {
                 AuditIssueConfidence.FIRM,
                 new HttpRequestResponse[]{reqRes}
         );
+    }
+
+    private HttpService getServiceFromUrl(String urlStr) {
+        try {
+            URL url = new URL(urlStr);
+            String host = url.getHost();
+            int port = url.getPort();
+            boolean secure = url.getProtocol().equalsIgnoreCase("https");
+            if (port == -1) {
+                port = secure ? 443 : 80;
+            }
+            return HttpService.httpService(host, port, secure);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String getPathFromUrl(String urlStr) {

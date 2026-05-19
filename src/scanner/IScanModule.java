@@ -24,4 +24,18 @@ public interface IScanModule {
      * Perform passive scanning on a specific request/response pair.
      */
     List<AuditIssue> doPassiveScan(HttpRequestResponse baseRequestResponse, ScanOptions options);
+
+    /**
+     * Perform active scanning on a list of request/response pairs.
+     */
+    default List<AuditIssue> doActiveScanBatch(List<HttpRequestResponse> baseRequestResponses, AuditInsertionPoint insertionPoint, ScanOptions options) {
+        return null;
+    }
+
+    /**
+     * Perform passive scanning on a list of request/response pairs.
+     */
+    default List<AuditIssue> doPassiveScanBatch(List<HttpRequestResponse> baseRequestResponses, ScanOptions options) {
+        return null;
+    }
 }

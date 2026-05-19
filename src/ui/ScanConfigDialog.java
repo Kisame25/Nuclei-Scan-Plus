@@ -12,12 +12,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
+import utils.FontUtils;
 
 public class ScanConfigDialog extends JDialog {
     private boolean confirmed = false;
     private final MontoyaApi api;
-    private final HttpRequestResponse messageInfo;
-    private final HttpRequestEditor requestViewer;
+    private final List<HttpRequestResponse> selectedItems;
+    private HttpRequestEditor requestViewer;
     
     // 1. Dynamic Nuclei Checkboxes (Top)
     private final Map<String, JCheckBox> nucleiDirCheckboxes = new HashMap<>();
@@ -34,10 +35,10 @@ public class ScanConfigDialog extends JDialog {
     private final JPanel contentPanel = new JPanel(cardLayout);
     private final JList<String> sidebarList;
 
-    public ScanConfigDialog(Frame owner, MontoyaApi api, Config globalConfig, HttpRequestResponse messageInfo) {
+    public ScanConfigDialog(Frame owner, MontoyaApi api, Config globalConfig, List<HttpRequestResponse> selectedItems) {
         super(owner, "Nuclei Scan Configuration", true);
         this.api = api;
-        this.messageInfo = messageInfo;
+        this.selectedItems = selectedItems;
         
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(960, 720));
@@ -63,9 +64,22 @@ public class ScanConfigDialog extends JDialog {
 
         // 1. Request Card
         JPanel requestCard = new JPanel(new BorderLayout());
-        this.requestViewer = api.userInterface().createHttpRequestEditor();
-        requestViewer.setRequest(messageInfo.request());
-        requestCard.add(requestViewer.uiComponent(), BorderLayout.CENTER);
+        if (selectedItems.size() == 1) {
+            this.requestViewer = api.userInterface().createHttpRequestEditor();
+            requestViewer.setRequest(selectedItems.get(0).request());
+            requestCard.add(requestViewer.uiComponent(), BorderLayout.CENTER);
+        } else {
+            JTextArea urlArea = new JTextArea();
+            urlArea.setEditable(false);
+            urlArea.setFont(FontUtils.getSubTitleFont());
+            StringBuilder sb = new StringBuilder();
+            sb.append("Scanning multiple items (").append(selectedItems.size()).append(" total):\n\n");
+            for (HttpRequestResponse item : selectedItems) {
+                sb.append("- ").append(item.request().url()).append("\n");
+            }
+            urlArea.setText(sb.toString());
+            requestCard.add(new JScrollPane(urlArea), BorderLayout.CENTER);
+        }
         contentPanel.add(requestCard, "Request");
 
         // 2. Nuclei Configuration Card (Reordered)
@@ -141,6 +155,10 @@ public class ScanConfigDialog extends JDialog {
         // And normal request scan
         gbc.gridy = row++; gbc.gridheight = 1; gbc.insets = new Insets(5, 8, 5, 8);
         scanPostReq = new JCheckBox("Scan Post Method");
+        if (selectedItems.size() > 1) {
+            scanPostReq.setEnabled(false);
+            scanPostReq.setToolTipText("Scan Post Method is only available for single request scans.");
+        }
         configCard.add(scanPostReq, gbc);
 
 
@@ -223,6 +241,6 @@ public class ScanConfigDialog extends JDialog {
     }
 
     public burp.api.montoya.http.message.requests.HttpRequest getEditedRequest() {
-        return requestViewer.getRequest();
+        return (requestViewer != null) ? requestViewer.getRequest() : null;
     }
 }

@@ -64,6 +64,28 @@ public class ScannerEngine implements ScanCheck {
         return auditResult(allIssues);
     }
 
+    public AuditResult activeAuditBatch(List<HttpRequestResponse> baseRequestResponses, AuditInsertionPoint insertionPoint, ScanOptions options) {
+        List<AuditIssue> allIssues = new ArrayList<>();
+        for (IScanModule module : modules) {
+            List<AuditIssue> issues = module.doActiveScanBatch(baseRequestResponses, insertionPoint, options);
+            if (issues != null) {
+                allIssues.addAll(issues);
+            }
+        }
+        return auditResult(allIssues);
+    }
+
+    public AuditResult passiveAuditBatch(List<HttpRequestResponse> baseRequestResponses, ScanOptions options) {
+        List<AuditIssue> allIssues = new ArrayList<>();
+        for (IScanModule module : modules) {
+            List<AuditIssue> issues = module.doPassiveScanBatch(baseRequestResponses, options);
+            if (issues != null) {
+                allIssues.addAll(issues);
+            }
+        }
+        return auditResult(allIssues);
+    }
+
     @Override
     public ConsolidationAction consolidateIssues(AuditIssue existingIssue, AuditIssue newIssue) {
         if (existingIssue.name().equals(newIssue.name()) &&

@@ -54,7 +54,7 @@ public class ContextMenuFactory implements ContextMenuItemsProvider {
         JMenuItem item = new JMenuItem("Nuclei Scanner+");
         item.addActionListener(e -> {
             Frame parent = (Frame) SwingUtilities.getWindowAncestor(mainTab);
-            ScanConfigDialog dialog = new ScanConfigDialog(parent, api, config, selectedItems.get(0));
+            ScanConfigDialog dialog = new ScanConfigDialog(parent, api, config, selectedItems);
             dialog.setVisible(true);
 
             if (dialog.isConfirmed()) {
@@ -76,33 +76,34 @@ public class ContextMenuFactory implements ContextMenuItemsProvider {
                 burp.api.montoya.http.message.requests.HttpRequest editedRequest = dialog.getEditedRequest();
                 
                 new Thread(() -> {
-                    AtomicInteger completedItems = new AtomicInteger(0);
-                    int totalItems = selectedItems.size();
+                    try {
+                        List<HttpRequestResponse> itemsToScan = new ArrayList<>(selectedItems);
+                        if (editedRequest != null && !itemsToScan.isEmpty()) {
+                            HttpRequestResponse firstItem = itemsToScan.get(0);
+                            itemsToScan.set(0, HttpRequestResponse.httpRequestResponse(editedRequest, firstItem.response()));
+                        }
 
-                    for (int i = 0; i < totalItems; i++) {
-                        final int index = i;
-                        HttpRequestResponse originalMessage = selectedItems.get(i);
-                        
-                        scanExecutor.submit(() -> {
-                            try {
-                                if (task.isStopped()) return;
-
-                                HttpRequestResponse messageToScan = originalMessage;
-                                // If it's the first item, use the edited request
-                                if (index == 0 && editedRequest != null) {
-                                    messageToScan = HttpRequestResponse.httpRequestResponse(editedRequest, originalMessage.response());
-                                }
-
-                                runScan(messageToScan, task, options);
-                            } finally {
-                                int currentCount = completedItems.incrementAndGet();
-                                task.setProgress((int) (((double) currentCount / totalItems) * 100));
-                                if (currentCount == totalItems) {
-                                    task.setStatus("Finished");
-                                }
-                                mainTab.updateTasks();
-                            }
-                        });
+                        if (itemsToScan.size() > 1) {
+                            // Batch Scan
+                            task.setStatus("Auditting (Batch)");
+                            mainTab.updateTasks();
+                            
+                            runScanBatch(itemsToScan, task, options);
+                            
+                            task.setProgress(100);
+                            task.setStatus("Finished");
+                            mainTab.updateTasks();
+                        } else if (!itemsToScan.isEmpty()) {
+                            // Single Scan
+                            runScan(itemsToScan.get(0), task, options);
+                            task.setProgress(100);
+                            task.setStatus("Finished");
+                            mainTab.updateTasks();
+                        }
+                    } catch (Exception ex) {
+                        api.logging().logToError("Error in scan thread: " + ex.getMessage());
+                        task.setStatus("Error");
+                        mainTab.updateTasks();
                     }
                 }).start();
             }
@@ -110,6 +111,17 @@ public class ContextMenuFactory implements ContextMenuItemsProvider {
         menuList.add(item);
         
         return menuList;
+    }
+
+    private void runScanBatch(List<HttpRequestResponse> messages, ScanTask task, ScanOptions options) {
+        List<AuditIssue> issues = scannerEngine.activeAuditBatch(messages, null, options).auditIssues();
+
+        if (issues != null) {
+            for (AuditIssue issue : issues) {
+                task.addIssue(issue);
+                api.siteMap().add(issue);
+            }
+        }
     }
 
     private void runScan(HttpRequestResponse message, ScanTask task, ScanOptions options) {
