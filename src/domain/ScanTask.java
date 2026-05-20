@@ -1,4 +1,4 @@
-package model;
+package domain;
 
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import java.util.ArrayList;
@@ -20,7 +20,6 @@ public class ScanTask {
     private int infoIssues = 0;
     private volatile boolean stopped = false;
     private Process currentProcess;
-    private String latestLog = "";
 
     public ScanTask(String name) {
         this.id = idCounter.getAndIncrement();
@@ -50,9 +49,6 @@ public class ScanTask {
     public int getProgress() { return progress; }
     public void setProgress(int progress) { this.progress = progress; }
 
-    public String getLatestLog() { return latestLog; }
-    public void setLatestLog(String latestLog) { this.latestLog = latestLog; }
-
     public synchronized void addIssue(AuditIssue issue) {
         issues.add(issue);
         switch (issue.severity()) {
@@ -72,7 +68,4 @@ public class ScanTask {
     public int getLowCount() { return lowIssues; }
     public int getInfoCount() { return infoIssues; }
 
-    public String getIssueCounts() {
-        return String.format("H:%d, M:%d, L:%d, I:%d", highIssues, mediumIssues, lowIssues, infoIssues);
-    }
 }

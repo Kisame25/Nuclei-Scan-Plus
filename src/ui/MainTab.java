@@ -4,23 +4,31 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
-import model.Config;
-import model.ScanTask;
-import utils.FontUtils;
+import config.Config;
+import domain.ScanTask;
+import ui.model.ResultsTableModel;
+import ui.model.TaskTableModel;
+import ui.util.FontUtils;
 import javax.swing.*;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
-import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 
 public class MainTab extends JTabbedPane {
+
+    private static final int TASK_CARD_MARGIN_LEFT = 4;
+    private static final int TASK_CARD_MARGIN_TOP = 4;
+    private static final int TASK_CARD_PADDING_TOP = 12;
+    private static final int TASK_CARD_PADDING_RIGHT = 15;
+    private static final int TASK_MENU_ICON_SIZE = 24;
 
     private final Config config;
     private final ResultsTableModel resultsTableModel;
@@ -36,6 +44,8 @@ public class MainTab extends JTabbedPane {
     private JEditorPane advisoryViewer;
     
     private JTextArea logArea;
+    private Timer progressAnimationTimer;
+    private int progressAnimationFrame = 0;
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public MainTab(MontoyaApi api, Config config) {
@@ -47,17 +57,34 @@ public class MainTab extends JTabbedPane {
         setupDashboard();
         setupSettings();
         setupLogs();
+        startProgressAnimationTimer();
     }
 
     public void addTask(ScanTask task) {
-        taskTableModel.addTask(task);
+        SwingUtilities.invokeLater(() -> {
+            taskTableModel.addTask(task);
+            tasksTable.setRowSelectionInterval(0, 0);
+            selectTask(task);
+        });
     }
 
     public void updateTasks() {
-        taskTableModel.updateTask();
-        if (currentSelectedTask != null) {
-            resultsTableModel.setIssues(currentSelectedTask.getIssues());
-        }
+        SwingUtilities.invokeLater(() -> {
+            taskTableModel.updateTask();
+            if (currentSelectedTask != null) {
+                resultsTableModel.setIssues(currentSelectedTask.getIssues());
+            }
+        });
+    }
+
+    public void addIssue(ScanTask task, AuditIssue issue) {
+        task.addIssue(issue);
+        SwingUtilities.invokeLater(() -> {
+            taskTableModel.updateTask();
+            if (currentSelectedTask == task) {
+                resultsTableModel.addIssue(issue);
+            }
+        });
     }
     
     public void log(String message) {
@@ -93,40 +120,37 @@ public class MainTab extends JTabbedPane {
         tasksTable.setDefaultRenderer(Object.class, new TaskCellRenderer());
         tasksTable.setBackground(UIManager.getColor("Table.background"));
 
-        // Right-click to select row
-        tasksTable.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mousePressed(java.awt.event.MouseEvent e) {
-                if (SwingUtilities.isRightMouseButton(e)) {
-                    int row = tasksTable.rowAtPoint(e.getPoint());
-                    if (row != -1) {
-                        tasksTable.setRowSelectionInterval(row, row);
-                    }
-                }
-            }
-        });
-
-        tasksTable.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
-                int row = tasksTable.getSelectedRow();
-                if (row != -1) {
-                    selectTask(taskTableModel.getTaskAt(row));
-                }
-            }
-        });
-
         // Popup Menu for Tasks
         JPopupMenu taskPopupMenu = new JPopupMenu();
-        JMenuItem stopItem = new JMenuItem("Stop Task");
+        JMenuItem stopItem = new JMenuItem("⏹ Stop");
+        taskPopupMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                int row = tasksTable.getSelectedRow();
+                ScanTask task = row != -1 ? taskTableModel.getTaskAt(row) : null;
+                stopItem.setEnabled(isTaskStoppable(task));
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
+        });
         stopItem.addActionListener(e -> {
             int row = tasksTable.getSelectedRow();
             if (row != -1) {
                 ScanTask task = taskTableModel.getTaskAt(row);
-                task.stop();
-                updateTasks();
+                if (isTaskStoppable(task)) {
+                    task.stop();
+                    updateTasks();
+                    tasksTable.repaint();
+                }
             }
         });
-        JMenuItem deleteItem = new JMenuItem("Delete Task");
+        JMenuItem deleteItem = new JMenuItem("🗙 Delete");
         deleteItem.addActionListener(e -> {
             int row = tasksTable.getSelectedRow();
             if (row != -1) {
@@ -148,6 +172,32 @@ public class MainTab extends JTabbedPane {
         });
         taskPopupMenu.add(stopItem);
         taskPopupMenu.add(deleteItem);
+
+        // Right-click selects the row; left-click on the menu icon opens the task menu.
+        tasksTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                int row = tasksTable.rowAtPoint(e.getPoint());
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    if (row != -1) {
+                        tasksTable.setRowSelectionInterval(row, row);
+                    }
+                } else if (row != -1 && SwingUtilities.isLeftMouseButton(e) && isTaskMenuIconHit(e.getPoint())) {
+                    tasksTable.setRowSelectionInterval(row, row);
+                    taskPopupMenu.show(tasksTable, e.getX(), e.getY());
+                }
+            }
+        });
+
+        tasksTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int row = tasksTable.getSelectedRow();
+                if (row != -1) {
+                    selectTask(taskTableModel.getTaskAt(row));
+                }
+            }
+        });
+
         tasksTable.setComponentPopupMenu(taskPopupMenu);
 
         JScrollPane sidebarScroll = new JScrollPane(tasksTable);
@@ -396,6 +446,55 @@ public class MainTab extends JTabbedPane {
         addTab("Logs", logPanel);
     }
 
+    private void startProgressAnimationTimer() {
+        progressAnimationTimer = new Timer(80, e -> {
+            if (hasRunningTasks()) {
+                progressAnimationFrame++;
+                tasksTable.repaint();
+            }
+        });
+        progressAnimationTimer.start();
+    }
+
+    private boolean hasRunningTasks() {
+        for (int i = 0; i < taskTableModel.getRowCount(); i++) {
+            ScanTask task = taskTableModel.getTaskAt(i);
+            if (task != null
+                    && !task.getStatus().equalsIgnoreCase("Finished")
+                    && !task.getStatus().equalsIgnoreCase("Stopped")
+                    && !task.getStatus().equalsIgnoreCase("Error")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isTaskStoppable(ScanTask task) {
+        if (task == null || task.isStopped()) return false;
+
+        String status = task.getStatus();
+        return status == null
+                || (!status.equalsIgnoreCase("Finished")
+                && !status.equalsIgnoreCase("Stopped")
+                && !status.equalsIgnoreCase("Error"));
+    }
+
+    private boolean isTaskMenuIconHit(Point point) {
+        int row = tasksTable.rowAtPoint(point);
+        int column = tasksTable.columnAtPoint(point);
+        if (row == -1 || column == -1) return false;
+
+        Rectangle cell = tasksTable.getCellRect(row, column, false);
+        int iconX = cell.x + cell.width
+                - TASK_CARD_MARGIN_LEFT
+                - TASK_CARD_PADDING_RIGHT
+                - TASK_MENU_ICON_SIZE;
+        int iconY = cell.y + TASK_CARD_MARGIN_TOP + TASK_CARD_PADDING_TOP - 2;
+
+        Rectangle iconBounds = new Rectangle(iconX, iconY, TASK_MENU_ICON_SIZE, TASK_MENU_ICON_SIZE);
+        return iconBounds.contains(point);
+    }
+
     private class TaskCellRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
@@ -455,12 +554,24 @@ public class MainTab extends JTabbedPane {
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.fill = GridBagConstraints.HORIZONTAL;
 
-            // 1. Title
+            // 1. Title and task menu affordance
             JLabel nameLabel = new JLabel(task.getId() + ". " + task.getName());
             nameLabel.setFont(FontUtils.getTitleFont());
             nameLabel.setForeground(titleFg);
-            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 2; gbc.weightx = 1.0;
+            gbc.gridx = 0; gbc.gridy = 0; gbc.gridwidth = 1; gbc.weightx = 1.0;
+            gbc.insets = new Insets(0, 0, 0, 8);
             card.add(nameLabel, gbc);
+
+            JLabel menuLabel = new JLabel("⋮");
+            menuLabel.setFont(FontUtils.getTitleFont().deriveFont(Font.BOLD, 18f));
+            menuLabel.setForeground(subFg);
+            menuLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            menuLabel.setToolTipText("Task actions");
+            menuLabel.setPreferredSize(new Dimension(TASK_MENU_ICON_SIZE, TASK_MENU_ICON_SIZE));
+            menuLabel.setMinimumSize(new Dimension(TASK_MENU_ICON_SIZE, TASK_MENU_ICON_SIZE));
+            gbc.gridx = 1; gbc.gridy = 0; gbc.gridwidth = 1; gbc.weightx = 0;
+            gbc.insets = new Insets(-2, 0, 0, 0);
+            card.add(menuLabel, gbc);
 
             // 2. Subtitle / Streaming Log
             String subText = task.getStatus().equalsIgnoreCase("Finished") ? "Audit finished" : "Auditting";
@@ -471,16 +582,12 @@ public class MainTab extends JTabbedPane {
             JLabel subLabel = new JLabel(subText);
             subLabel.setFont(FontUtils.getSubTitleFont());
             subLabel.setForeground(subFg);
-            gbc.gridy = 1; gbc.insets = new Insets(2, 0, 12, 0); // More room below subtitle
+            gbc.gridx = 0; gbc.gridy = 1; gbc.gridwidth = 2; gbc.weightx = 1.0;
+            gbc.insets = new Insets(2, 0, 12, 0); // More room below subtitle
             card.add(subLabel, gbc);
 
             // 3. Progress Bar
-            JProgressBar progressBar = new JProgressBar(0, 100);
-            progressBar.setValue(task.getProgress());
-            progressBar.setPreferredSize(new Dimension(100, 4));
-            progressBar.setForeground(new Color(0, 120, 215));
-            progressBar.setBackground(progressBg);
-            progressBar.setBorderPainted(false);
+            JProgressBar progressBar = createBurpProgressBar(task, progressBg, isDark);
             gbc.gridy = 2; gbc.insets = new Insets(0, 0, 12, 0); // More room below progress bar
             card.add(progressBar, gbc);
 
@@ -529,6 +636,69 @@ public class MainTab extends JTabbedPane {
 
             wrapper.add(card, BorderLayout.CENTER);
             return wrapper;
+        }
+
+        private JProgressBar createBurpProgressBar(ScanTask task, Color trackColor, boolean isDark) {
+            boolean finished = task.getStatus().equalsIgnoreCase("Finished");
+            boolean stopped = task.getStatus().equalsIgnoreCase("Stopped");
+            boolean running = !finished && !stopped;
+
+            JProgressBar progressBar = new JProgressBar(0, 100) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    int width = getWidth();
+                    int height = getHeight();
+                    int arc = Math.max(6, height);
+
+                    g2.setColor(getBackground());
+                    g2.fillRoundRect(0, 0, width, height, arc, arc);
+
+                    int value = Math.max(getMinimum(), Math.min(getMaximum(), getValue()));
+                    int fillWidth = running ? Math.max(width / 3, 36) : Math.round(width * (value / 100f));
+                    fillWidth = Math.min(width, Math.max(0, fillWidth));
+
+                    if (fillWidth > 0) {
+                        int fillX = 0;
+                        if (running) {
+                            int travel = Math.max(1, width - fillWidth);
+                            int cycle = travel * 2;
+                            int position = (progressAnimationFrame * 4) % cycle;
+                            fillX = position <= travel ? position : cycle - position;
+                        }
+
+                        Color start = getForeground();
+                        Color end = getForeground().darker();
+                        g2.setPaint(new GradientPaint(fillX, 0, start, fillX + fillWidth, 0, end));
+                        g2.fillRoundRect(fillX, 0, fillWidth, height, arc, arc);
+                    }
+
+                    g2.setColor(isDark ? new Color(255, 255, 255, 35) : new Color(0, 0, 0, 35));
+                    g2.drawRoundRect(0, 0, width - 1, height - 1, arc, arc);
+                    g2.dispose();
+                }
+            };
+
+            progressBar.setValue(task.getProgress());
+            progressBar.setPreferredSize(new Dimension(100, 8));
+            progressBar.setMinimumSize(new Dimension(80, 8));
+            progressBar.setBorder(BorderFactory.createEmptyBorder());
+            progressBar.setBorderPainted(false);
+            progressBar.setStringPainted(false);
+            progressBar.setOpaque(false);
+            progressBar.setBackground(trackColor);
+
+            if (finished) {
+                progressBar.setForeground(new Color(0, 120, 215));
+            } else if (stopped) {
+                progressBar.setForeground(new Color(190, 70, 70));
+            } else {
+                progressBar.setForeground(new Color(0, 120, 215));
+            }
+
+            return progressBar;
         }
 
         private JLabel createCountBadge(int count, Color color) {

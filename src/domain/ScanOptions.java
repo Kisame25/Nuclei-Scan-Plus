@@ -1,9 +1,7 @@
-package model;
+package domain;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ScanOptions {
     private final List<String> selectedNucleiTemplates;

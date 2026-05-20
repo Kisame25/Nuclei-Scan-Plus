@@ -6,7 +6,8 @@ set "SRC_DIR=src"
 set "OUT_DIR=build\classes"
 set "JAR_NAME=nuclei-scanner+.jar"
 
-if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
+if exist "%OUT_DIR%" rd /s /q "%OUT_DIR%"
+mkdir "%OUT_DIR%"
 
 echo [INFO] Finding source files...
 dir /s /b "%SRC_DIR%\*.java" > sources.txt

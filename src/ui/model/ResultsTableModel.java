@@ -1,4 +1,4 @@
-package ui;
+package ui.model;
 
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import javax.swing.table.AbstractTableModel;

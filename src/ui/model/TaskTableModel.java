@@ -1,6 +1,6 @@
-package ui;
+package ui.model;
 
-import model.ScanTask;
+import domain.ScanTask;
 import javax.swing.table.AbstractTableModel;
 import java.util.ArrayList;
 import java.util.List;

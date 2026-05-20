@@ -8,6 +8,7 @@ SRC_DIR="src"
 OUT_DIR="build/classes"
 JAR_NAME="nuclei-scanner+.jar"
 
+rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 echo "[INFO] Finding source files..."

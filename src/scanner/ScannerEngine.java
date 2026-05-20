@@ -1,14 +1,12 @@
 package scanner;
 
-import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.scanner.AuditResult;
 import burp.api.montoya.scanner.ScanCheck;
 import burp.api.montoya.scanner.ConsolidationAction;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import model.Config;
-import model.ScanOptions;
+import domain.ScanOptions;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,14 +16,10 @@ import static burp.api.montoya.scanner.AuditResult.auditResult;
  * Main engine that orchestrates Nuclei scanning.
  */
 public class ScannerEngine implements ScanCheck {
-    private final MontoyaApi api;
     private final List<IScanModule> modules;
-    private final Config config;
 
-    public ScannerEngine(MontoyaApi api, Config config) {
-        this.api = api;
+    public ScannerEngine() {
         this.modules = new ArrayList<>();
-        this.config = config;
     }
 
     public void addModule(IScanModule module) {

@@ -1,4 +1,4 @@
-package model;
+package burpimpl;
 
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;

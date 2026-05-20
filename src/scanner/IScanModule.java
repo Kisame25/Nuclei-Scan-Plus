@@ -3,7 +3,7 @@ package scanner;
 import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint;
-import model.ScanOptions;
+import domain.ScanOptions;
 import java.util.List;
 
 /**

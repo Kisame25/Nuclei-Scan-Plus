@@ -2,15 +2,14 @@ package burp;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
-import model.Config;
+import config.Config;
 import scanner.ScannerEngine;
-import scanner.NucleiScanner;
+import nuclei.NucleiScanner;
 import ui.MainTab;
 import ui.ContextMenuFactory;
 import utils.Logger;
 
 public class BurpExtender implements BurpExtension {
-    private MontoyaApi api;
     private ScannerEngine scannerEngine;
     private MainTab mainTab;
     private Logger logger;
@@ -18,7 +17,6 @@ public class BurpExtender implements BurpExtension {
 
     @Override
     public void initialize(MontoyaApi api) {
-        this.api = api;
         this.logger = new Logger(api.logging());
         this.config = new Config(api.persistence());
 
@@ -29,7 +27,7 @@ public class BurpExtender implements BurpExtension {
         api.userInterface().registerSuiteTab("Nuclei Scanner+", mainTab);
 
         // Initialize Scanner Engine
-        scannerEngine = new ScannerEngine(api, config);
+        scannerEngine = new ScannerEngine();
         // Only add NucleiScanner, pass mainTab for UI logging
         scannerEngine.addModule(new NucleiScanner(api, config, mainTab));
 

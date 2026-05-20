@@ -1,4 +1,4 @@
-package scanner;
+package nuclei;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.HttpService;
@@ -9,14 +9,14 @@ import burp.api.montoya.scanner.audit.issues.AuditIssue;
 import burp.api.montoya.scanner.audit.issues.AuditIssueConfidence;
 import burp.api.montoya.scanner.audit.issues.AuditIssueSeverity;
 import burp.api.montoya.scanner.audit.insertionpoint.AuditInsertionPoint;
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonElement;
-import model.Config;
-import model.CustomScanIssue;
-import model.ScanOptions;
-import model.ScanTask;
+import burpimpl.CustomScanIssue;
+import config.Config;
+import domain.ScanOptions;
+import domain.ScanTask;
+import scanner.IScanModule;
 import ui.MainTab;
 
 import java.io.BufferedReader;
@@ -33,23 +33,19 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.Set;
 
 public class NucleiScanner implements IScanModule {
     private final MontoyaApi api;
     private final Config config;
     private final MainTab mainTab;
-    private final Gson gson;
     private final Semaphore scanSemaphore = new Semaphore(10);
 
     public NucleiScanner(MontoyaApi api, Config config, MainTab mainTab) {
         this.api = api;
         this.config = config;
         this.mainTab = mainTab;
-        this.gson = new Gson();
     }
 
     @Override
@@ -220,13 +216,12 @@ public class NucleiScanner implements IScanModule {
                     JsonObject jsonObj = element.getAsJsonObject();
                     logLine = formatCondensedLog(jsonObj);
                     
-                    if (task != null) {
-                        task.setLatestLog(logLine);
-                        mainTab.updateTasks();
-                    }
+                    if (task != null) mainTab.updateTasks();
                     mainTab.log("NUCLEI: " + logLine);
 
-                    issues.add(parseNucleiJsonFinding(jsonObj, baseRequestResponse));
+                    AuditIssue issue = parseNucleiJsonFinding(jsonObj, baseRequestResponse);
+                    issues.add(issue);
+                    publishIssue(task, issue);
                     return;
                 }
             } catch (Exception e) {
@@ -234,12 +229,22 @@ public class NucleiScanner implements IScanModule {
             }
         }
         
-        if (task != null) {
-            task.setLatestLog(logLine);
-            mainTab.updateTasks();
-        }
+        if (task != null) mainTab.updateTasks();
         mainTab.log("NUCLEI: " + logLine);
-        parseNucleiTextFinding(strippedLine, issues, baseRequestResponse);
+        AuditIssue issue = parseNucleiTextFinding(strippedLine, baseRequestResponse);
+        if (issue != null) {
+            issues.add(issue);
+            publishIssue(task, issue);
+        }
+    }
+
+    private void publishIssue(ScanTask task, AuditIssue issue) {
+        if (issue == null) return;
+
+        if (task != null) {
+            mainTab.addIssue(task, issue);
+        }
+        api.siteMap().add(issue);
     }
 
     private String formatCondensedLog(JsonObject json) {
@@ -356,7 +361,7 @@ public class NucleiScanner implements IScanModule {
         return xml.toString();
     }
 
-    private void parseNucleiTextFinding(String line, List<AuditIssue> issues, HttpRequestResponse baseRequestResponse) {
+    private AuditIssue parseNucleiTextFinding(String line, HttpRequestResponse baseRequestResponse) {
         Pattern pattern = Pattern.compile("^\\[([^\\]]+)\\] \\[([^\\]]+)\\] \\[([^\\]]+)\\] (\\S+)");
         Matcher matcher = pattern.matcher(line);
         
@@ -384,7 +389,7 @@ public class NucleiScanner implements IScanModule {
             String detail = String.format("<html><body><b>Nuclei Template:</b> %s<br><b>Protocol:</b> %s<br><b>Matched at:</b> %s<br><br><font color='red'><i>Warning: Full request/response only available in JSON mode. Ensure Nuclei outputs JSON findings.</i></font></body></html>",
                     templateId, proto, url);
 
-            issues.add(new CustomScanIssue(
+            return new CustomScanIssue(
                     templateId,
                     detail,
                     "Refer to Nuclei template for remediation.",
@@ -392,8 +397,9 @@ public class NucleiScanner implements IScanModule {
                     mapSeverity(severityStr),
                     AuditIssueConfidence.FIRM,
                     new HttpRequestResponse[]{reqRes}
-            ));
+            );
         }
+        return null;
     }
 
     private AuditIssue parseNucleiJsonFinding(JsonObject json, HttpRequestResponse baseRequestResponse) {

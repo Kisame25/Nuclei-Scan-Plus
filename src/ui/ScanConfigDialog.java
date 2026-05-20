@@ -3,7 +3,9 @@ package ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
-import model.Config;
+import config.Config;
+import ui.model.UrlsTableModel;
+import ui.util.FontUtils;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
@@ -12,12 +14,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
-import utils.FontUtils;
 
 public class ScanConfigDialog extends JDialog {
     private boolean confirmed = false;
-    private final MontoyaApi api;
-    private final List<HttpRequestResponse> selectedItems;
     private HttpRequestEditor requestViewer;
     
     // 1. Dynamic Nuclei Checkboxes (Top)
@@ -37,8 +36,6 @@ public class ScanConfigDialog extends JDialog {
 
     public ScanConfigDialog(Frame owner, MontoyaApi api, Config globalConfig, List<HttpRequestResponse> selectedItems) {
         super(owner, "Nuclei Scan Configuration", true);
-        this.api = api;
-        this.selectedItems = selectedItems;
         
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(960, 720));

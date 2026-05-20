@@ -1,18 +1,14 @@
-package model;
+package config;
 
 import burp.api.montoya.persistence.Persistence;
-import java.util.HashMap;
-import java.util.Map;
 
 public class Config {
-    private final Map<String, Boolean> moduleStates;
     private String nucleiPath = "";
     private String templatesPath = "";
     private final Persistence persistence;
 
     public Config(Persistence persistence) {
         this.persistence = persistence;
-        this.moduleStates = new HashMap<>();
         load();
     }
 
@@ -27,14 +23,6 @@ public class Config {
     public void save() {
         persistence.extensionData().setString("nucleiPath", nucleiPath);
         persistence.extensionData().setString("templatesPath", templatesPath);
-    }
-
-    public void setModuleState(String moduleName, boolean enabled) {
-        moduleStates.put(moduleName, enabled);
-    }
-
-    public boolean isModuleEnabled(String moduleName) {
-        return moduleStates.getOrDefault(moduleName, true);
     }
 
     public String getNucleiPath() {
