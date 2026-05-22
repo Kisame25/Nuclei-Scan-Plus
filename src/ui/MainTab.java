@@ -9,6 +9,7 @@ import domain.ScanTask;
 import ui.model.ResultsTableModel;
 import ui.model.TaskTableModel;
 import ui.util.FontUtils;
+import utils.ReportGenerator;
 import javax.swing.*;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -18,8 +19,10 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
+import com.google.gson.JsonParser;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.File;
 
 
 public class MainTab extends JTabbedPane {
@@ -122,6 +125,59 @@ public class MainTab extends JTabbedPane {
         if (logArea != null) logArea.setText("");
     }
 
+    private void handleImport() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Import Scan Task (JSON)");
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON Files", "json"));
+
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            try {
+                ScanTask importedTask = ReportGenerator.importJSON(file, api);
+                addTask(importedTask);
+                JOptionPane.showMessageDialog(this, "Task imported successfully!");
+            } catch (Exception ex) {
+                log("Error importing task: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this, "Error importing task: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void handleExport(String format) {
+        int row = tasksTable.getSelectedRow();
+        if (row == -1) return;
+        
+        ScanTask task = taskTableModel.getTaskAt(row);
+        if (task.getIssues().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No findings to export for this task.");
+            return;
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Save Report");
+        
+        SimpleDateFormat fileDateFmt = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss");
+        String timestamp = fileDateFmt.format(new Date());
+        String defaultName = timestamp + "." + format;
+        
+        fileChooser.setSelectedFile(new File(defaultName));
+
+        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File file = fileChooser.getSelectedFile();
+            try {
+                switch (format) {
+                    case "html": ReportGenerator.exportHTML(task, file); break;
+                    case "markdown": ReportGenerator.exportMarkdown(task, file); break;
+                    case "json": ReportGenerator.exportJSON(task, file); break;
+                }
+                JOptionPane.showMessageDialog(this, "Report exported successfully to:\n" + file.getAbsolutePath());
+            } catch (Exception ex) {
+                log("Error exporting report: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this, "Error exporting report: " + ex.getMessage());
+            }
+        }
+    }
+
     private void setupDashboard() {
         JPanel dashboardPanel = new JPanel(new BorderLayout());
 
@@ -135,7 +191,12 @@ public class MainTab extends JTabbedPane {
         sidebarHeader.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         JLabel tasksLabel = new JLabel("Tasks");
         tasksLabel.setFont(FontUtils.getHeadingFont());
-        sidebarHeader.add(tasksLabel, BorderLayout.NORTH);
+        sidebarHeader.add(tasksLabel, BorderLayout.WEST);
+        
+        JButton importBtn = new JButton("📥 Import");
+        importBtn.setToolTipText("Import Scan results from JSON file");
+        importBtn.addActionListener(e -> handleImport());
+        sidebarHeader.add(importBtn, BorderLayout.EAST);
         
         sidebar.add(sidebarHeader, BorderLayout.NORTH);
 
@@ -198,7 +259,24 @@ public class MainTab extends JTabbedPane {
                 }
             }
         });
+
+        // Export Report Submenu
+        JMenu exportMenu = new JMenu("📤 Export Report");
+        JMenuItem exportHtml = new JMenuItem("HTML Report (.html)");
+        JMenuItem exportMd = new JMenuItem("Markdown Report (.md)");
+        JMenuItem exportJson = new JMenuItem("JSON Data (.json)");
+        
+        exportMenu.add(exportHtml);
+        exportMenu.add(exportMd);
+        exportMenu.add(exportJson);
+
+        exportHtml.addActionListener(e -> handleExport("html"));
+        exportMd.addActionListener(e -> handleExport("markdown"));
+        exportJson.addActionListener(e -> handleExport("json"));
+
         taskPopupMenu.add(stopItem);
+        taskPopupMenu.add(exportMenu);
+        taskPopupMenu.add(new JPopupMenu.Separator());
         taskPopupMenu.add(deleteItem);
 
         // Right-click selects the row; left-click on the menu icon opens the task menu.

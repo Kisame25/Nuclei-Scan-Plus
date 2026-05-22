@@ -8,47 +8,53 @@ This extension is designed for penetration testers and bug hunters who want to c
 
 ## Key Features
 
-- **Integrated Nuclei Dashboard:** A dedicated "Nuclei Scanner+" tab featuring a modern UI to track multiple scan tasks.
-- **Task Management:** Real-time monitoring of scan progress, logs, and issue counts (High, Medium, Low, Info).
-- **Seamless Result Mapping:** Nuclei findings are automatically converted into Burp Suite Audit Issues, complete with matched requests and responses (when JSON output is used).
-- **Flexible Scanning Options:**
-    - **Active Scanning:** Trigger specific templates or categories via the context menu.
-    - **Passive Scanning:** Optionally run Nuclei on requests as they flow through Burp.
-    - **Burp XML Integration:** High-fidelity scan mode that exports Burp requests to XML for Nuclei to consume, preserving complex request structures.
-- **Template Management:** Easily configure Nuclei binary paths and template directories.
-- **One-Click Updates:** Update both the Nuclei engine and its templates directly from the extension settings.
-- **Rich Visualization:** Custom "card-based" task view and detailed issue reporting.
+- **Integrated Nuclei Dashboard:** A modern, card-based UI to track multiple scan tasks with real-time progress bars.
+- **Advanced Task Management:** 
+    - **Single URL Optimization:** Automatically uses `-u` for single targets and `-l` for batch scans.
+    - **Smart Naming:** Tasks are automatically named after the target URL for easy identification.
+- **Comprehensive Reporting:** 
+    - **HTML:** Professional, styled reports with collapsible evidence sections.
+    - **Markdown:** Clean formatting ready for Bug Bounty platform submissions.
+    - **JSON:** Raw data export for automation and backup.
+- **Persistent Sessions (Import/Export):** 📥 Import previously exported JSON results back into the extension to restore full scan tasks, including all Request/Response evidence.
+- **Resource & Memory Safety:** 
+    - **Ghost Process Protection:** Automatically kills background Nuclei processes when tasks are deleted or the extension is unloaded.
+    - **Memory Optimization:** Implements log rotation (1,000-line limit) and explicit reference clearing to prevent memory leaks during long sessions.
+- **Interactive Results:** 
+    - **Table Sorting:** Click column headers (Severity, Finding, URL) to organize findings.
+    - **Full Evidence Mapping:** Found vulnerabilities map directly to the original Request/Response for manual verification.
+- **One-Click Updates:** Update both the Nuclei engine and its templates directly from the Settings tab.
 
 ## How to Use
 
 ### 1. Installation
 1. Ensure you have [Nuclei](https://github.com/projectdiscovery/nuclei) installed on your system.
-2. Download the latest `nuclei-scanner+.jar`.
+2. Download the latest `nuclei-scan-plus.jar`.
 3. In Burp Suite, navigate to **Extensions** -> **Installed**.
 4. Click **Add**, select the JAR file, and follow the prompts to install.
 
 ### 2. Configuration
-1. Navigate to the **Nuclei Scanner+** tab.
-2. Select the **Settings** sub-tab.
-3. Provide the absolute path to your `nuclei` executable (e.g., `C:\tools\nuclei.exe` or `/usr/local/bin/nuclei`).
-4. Set the path to your **Nuclei Templates** directory.
-5. (Optional) Use the **Update** buttons to ensure you have the latest engine and templates.
-6. Click **Save Configuration**.
+1. Go to the **Nuclei Scanner+** -> **Settings** tab.
+2. Set the **Nuclei Binary Path** (e.g., `C:\tools\nuclei.exe`).
+3. Set the **Nuclei Templates Path**.
+4. Click **Save Configuration**.
 
 ### 3. Running a Scan
-- **From Context Menu:** Right-click any request in the Proxy, Repeater, or Site Map tabs. Select **Extensions** -> **Nuclei Scanner+** and choose your desired scan option (e.g., "Full Scan", "Selected Templates").
-- **From Dashboard:** View the progress of your triggered scans in the Dashboard sub-tab.
+- **Start Scanning:** Right-click any request in Burp (Proxy, Repeater, etc.) -> **Extensions** -> **Nuclei Scanner+** -> Choose your scan mode.
+- **Monitor:** Switch to the **Dashboard** tab to see your tasks.
+- **Stop/Delete:** Click the three dots (⋮) on a task card to stop a running scan or delete the task data.
 
-### 4. Analyzing Results
-- Findings will appear in the **Dashboard** sub-tab under the specific task.
-- Issues are also registered in Burp Suite's native **Issue Activity** (Target -> Issue activity).
-- Selecting a finding in the Dashboard will show the associated Request and Response for further manual verification in Repeater or Intruder.
+### 4. Managing Results
+- **Sort Findings:** Click column headers in the Results table to sort by severity or name.
+- **Exporting:** Right-click a task (or click ⋮) -> **📤 Export Report** -> Select HTML, Markdown, or JSON. Filenames are automatically timestamped.
+- **Importing:** Click the **📥 Import** button in the sidebar header to load an old JSON report. This restores the task and all its evidence to your dashboard.
+- **Clearing Logs:** Use the "Clear Logs" button in the Logs tab to wipe the terminal output.
 
 ## Technical Details
 - **API:** Burp Montoya API
 - **Language:** Java
-- **Dependencies:** Google Gson (for Nuclei JSON output parsing)
-- **Engine:** Communicates with Nuclei via CLI for maximum compatibility with the latest templates.
+- **Format Support:** HTML5, CommonMark, JSON
+- **Memory Management:** Auto-trimming log buffers and process lifecycle hooks.
 
 ---
 *Developed for modern security workflows.*
