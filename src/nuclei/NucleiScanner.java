@@ -41,11 +41,24 @@ public class NucleiScanner implements IScanModule {
     private final Config config;
     private final MainTab mainTab;
     private final Semaphore scanSemaphore = new Semaphore(10);
+    private final List<Process> activeProcesses = new ArrayList<>();
 
     public NucleiScanner(MontoyaApi api, Config config, MainTab mainTab) {
         this.api = api;
         this.config = config;
         this.mainTab = mainTab;
+    }
+
+    @Override
+    public void stop() {
+        synchronized (activeProcesses) {
+            for (Process p : activeProcesses) {
+                if (p.isAlive()) {
+                    p.destroyForcibly();
+                }
+            }
+            activeProcesses.clear();
+        }
     }
 
     @Override
@@ -94,6 +107,7 @@ public class NucleiScanner implements IScanModule {
 
         List<AuditIssue> issues = new ArrayList<>();
         File tempFile = null;
+        Process process = null;
 
         try {
             List<String> command = buildCommand(options);
@@ -108,23 +122,32 @@ public class NucleiScanner implements IScanModule {
                 command.add("-im");
                 command.add("burp");
             } else {
-                tempFile = File.createTempFile("nuclei_targets_", ".txt");
-                StringBuilder targets = new StringBuilder();
-                for (HttpRequestResponse item : baseRequestResponses) {
-                    targets.append(item.request().url()).append("\n");
-                }
-                java.nio.file.Files.write(tempFile.toPath(), targets.toString().getBytes(StandardCharsets.UTF_8));
+                if (baseRequestResponses.size() == 1) {
+                    command.add("-u");
+                    command.add(baseRequestResponses.get(0).request().url());
+                } else {
+                    tempFile = File.createTempFile("nuclei_targets_", ".txt");
+                    StringBuilder targets = new StringBuilder();
+                    for (HttpRequestResponse item : baseRequestResponses) {
+                        targets.append(item.request().url()).append("\n");
+                    }
+                    java.nio.file.Files.write(tempFile.toPath(), targets.toString().getBytes(StandardCharsets.UTF_8));
 
-                command.add("-l");
-                command.add(tempFile.getAbsolutePath());
+                    command.add("-l");
+                    command.add(tempFile.getAbsolutePath());
+                }
             }
 
             mainTab.log("Executing Batch Scan: " + String.join(" ", command));
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
-            Process process = pb.start();
+            process = pb.start();
             
+            synchronized (activeProcesses) {
+                activeProcesses.add(process);
+            }
+
             if (task != null) {
                 task.setCurrentProcess(process);
             }
@@ -155,6 +178,11 @@ public class NucleiScanner implements IScanModule {
         } catch (Exception e) {
             mainTab.log("Error running Nuclei Batch: " + e.getMessage());
         } finally {
+            if (process != null) {
+                synchronized (activeProcesses) {
+                    activeProcesses.remove(process);
+                }
+            }
             scanSemaphore.release();
             if (tempFile != null && tempFile.exists()) {
                 tempFile.delete();

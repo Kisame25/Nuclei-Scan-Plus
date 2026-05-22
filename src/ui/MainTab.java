@@ -30,6 +30,7 @@ public class MainTab extends JTabbedPane {
     private static final int TASK_CARD_PADDING_RIGHT = 15;
     private static final int TASK_MENU_ICON_SIZE = 24;
 
+    private static final int MAX_LOG_LINES = 1000;
     private final Config config;
     private final ResultsTableModel resultsTableModel;
     private final TaskTableModel taskTableModel;
@@ -91,8 +92,34 @@ public class MainTab extends JTabbedPane {
         SwingUtilities.invokeLater(() -> {
             String timestamp = dateFormat.format(new Date());
             logArea.append("[" + timestamp + "] " + message + "\n");
+            
+            // Limit log size to prevent memory leak
+            if (logArea.getLineCount() > MAX_LOG_LINES) {
+                try {
+                    int end = logArea.getLineEndOffset(logArea.getLineCount() - MAX_LOG_LINES - 1);
+                    logArea.replaceRange("", 0, end);
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+            
             logArea.setCaretPosition(logArea.getDocument().getLength());
         });
+    }
+
+    public void stop() {
+        if (progressAnimationTimer != null) {
+            progressAnimationTimer.stop();
+        }
+        
+        // Explicitly clear data to help GC when extension unloads
+        taskTableModel.clear();
+        resultsTableModel.setIssues(new ArrayList<>());
+        
+        if (requestViewer != null) requestViewer.setRequest(null);
+        if (responseViewer != null) responseViewer.setResponse(null);
+        if (advisoryViewer != null) advisoryViewer.setText("");
+        if (logArea != null) logArea.setText("");
     }
 
     private void setupDashboard() {
@@ -156,6 +183,7 @@ public class MainTab extends JTabbedPane {
             if (row != -1) {
                 ScanTask task = taskTableModel.getTaskAt(row);
                 task.stop();
+                task.clearData();
                 taskTableModel.removeTask(task);
                 
                 if (currentSelectedTask == task) {
@@ -224,11 +252,14 @@ public class MainTab extends JTabbedPane {
         auditSplit.setDividerLocation(300);
 
         JTable resultsTable = new JTable(resultsTableModel);
+        resultsTable.setAutoCreateRowSorter(true); // Enable sorting
         resultsTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int row = resultsTable.getSelectedRow();
                 if (row != -1) {
-                    AuditIssue issue = resultsTableModel.getIssueAt(row);
+                    // Use convertRowIndexToModel to handle sorted view
+                    int modelRow = resultsTable.convertRowIndexToModel(row);
+                    AuditIssue issue = resultsTableModel.getIssueAt(modelRow);
                     updateRequestResponseView(issue);
                 }
             }

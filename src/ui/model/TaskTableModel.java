@@ -23,6 +23,15 @@ public class TaskTableModel extends AbstractTableModel {
         fireTableDataChanged();
     }
 
+    public synchronized void clear() {
+        for (ScanTask task : tasks) {
+            task.stop();
+            task.clearData();
+        }
+        tasks.clear();
+        fireTableDataChanged();
+    }
+
     @Override
     public int getRowCount() {
         return tasks.size();

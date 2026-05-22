@@ -68,4 +68,9 @@ public class ScanTask {
     public int getLowCount() { return lowIssues; }
     public int getInfoCount() { return infoIssues; }
 
+    public void clearData() {
+        this.issues.clear();
+        this.currentProcess = null;
+    }
+
 }

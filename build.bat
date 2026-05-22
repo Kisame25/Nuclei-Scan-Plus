@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 set "LIB_DIR=lib"
 set "SRC_DIR=src"
 set "OUT_DIR=build\classes"
-set "JAR_NAME=nuclei-scanner+.jar"
+set "JAR_NAME=nuclei-scan-plus.jar"
 
 if exist "%OUT_DIR%" rd /s /q "%OUT_DIR%"
 mkdir "%OUT_DIR%"

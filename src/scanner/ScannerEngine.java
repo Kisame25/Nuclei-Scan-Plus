@@ -88,4 +88,10 @@ public class ScannerEngine implements ScanCheck {
         }
         return ConsolidationAction.KEEP_BOTH;
     }
+
+    public void stop() {
+        for (IScanModule module : modules) {
+            module.stop();
+        }
+    }
 }

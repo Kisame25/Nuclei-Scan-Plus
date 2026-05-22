@@ -37,6 +37,11 @@ public class BurpExtender implements BurpExtension {
         // Register Context Menu
         api.userInterface().registerContextMenuItemsProvider(new ContextMenuFactory(api, scannerEngine, mainTab, config));
 
+        api.extension().registerUnloadingHandler(() -> {
+            mainTab.stop();
+            scannerEngine.stop();
+        });
+
         logger.info("Nuclei Scanner+ extension loaded successfully.");
     }
 }

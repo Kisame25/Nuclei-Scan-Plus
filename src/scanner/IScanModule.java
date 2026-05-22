@@ -38,4 +38,10 @@ public interface IScanModule {
     default List<AuditIssue> doPassiveScanBatch(List<HttpRequestResponse> baseRequestResponses, ScanOptions options) {
         return null;
     }
+
+    /**
+     * Stop all ongoing scans in this module.
+     */
+    default void stop() {
+    }
 }

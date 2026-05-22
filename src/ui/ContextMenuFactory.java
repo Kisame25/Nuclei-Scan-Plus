@@ -62,7 +62,13 @@ public class ContextMenuFactory implements ContextMenuItemsProvider {
                     options.addNucleiTemplate(tpl);
                 }
 
-                ScanTask task = new ScanTask("Nuclei Audit (" + selectedItems.size() + " items)");
+                String taskName;
+                if (selectedItems.size() == 1) {
+                    taskName = selectedItems.get(0).request().url();
+                } else {
+                    taskName = "Nuclei Audit (" + selectedItems.size() + " items)";
+                }
+                ScanTask task = new ScanTask(taskName);
                 options.setTask(task);
                 mainTab.addTask(task);
 
